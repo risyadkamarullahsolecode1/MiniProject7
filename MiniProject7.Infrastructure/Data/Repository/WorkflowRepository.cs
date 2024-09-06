@@ -1,7 +1,9 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using MiniProject7.Application.Interfaces;
+using MiniProject7.Application.Services;
 using MiniProject7.Domain.Entities;
 using MiniProject7.Domain.Interfaces;
 using System;
@@ -111,7 +113,7 @@ namespace MiniProject7.Infrastructure.Data.Repository
 
             var currentAction = await _context.WorkflowActions
                                               .AsNoTracking()
-                                              .FirstOrDefaultAsync(a => a.ProcessId == processId && a.ActorId == actorId && a.StepId == 1); // Ensure only for the right step
+                                              .FirstOrDefaultAsync(a => a.ProcessId == processId && a.ActorId == actorId && a.StepId == 1); 
 
             if (currentAction == null) throw new Exception("Current action not found.");
 
@@ -121,6 +123,7 @@ namespace MiniProject7.Infrastructure.Data.Repository
             string emailSubject = string.Empty;
             string emailBody = string.Empty;
             string employeeEmail = await GetEmployeeEmailById(leaveRequest.EmployeeId);
+
             // Supervisor approval flow
             if (userRoles.Contains("Supervisor"))
             {
@@ -130,6 +133,9 @@ namespace MiniProject7.Infrastructure.Data.Repository
                     nextStepId = 3; // StepId for HR Manager approval
                     nextProcessStatus = "Pending HR Approval";
                     leaveRequest.Description = "Pending HR Approval";
+                    // Email notification to HR Manager
+                    emailSubject = "Leave Request Pending HR Approval";
+                    emailBody = $"The leave request for {leaveRequest.RequestName} is pending HR approval.";
                 }
                 else
                 {
@@ -137,6 +143,9 @@ namespace MiniProject7.Infrastructure.Data.Repository
                     nextStepId = 5; // Rejected
                     nextProcessStatus = "Rejected";
                     leaveRequest.Description = "Rejected by Supervisor";
+                    // Email notification to Employee
+                    emailSubject = "Leave Request Rejected";
+                    emailBody = $"Your leave request '{leaveRequest.RequestName}' has been rejected by your supervisor.";
                 }
 
                 // Create new action for HR or rejection
@@ -144,7 +153,7 @@ namespace MiniProject7.Infrastructure.Data.Repository
                 {
                     ProcessId = processId,
                     StepId = isApproved ? nextStepId : 4, // Next step for HR if approved
-                    ActorId = isApproved ? "ba2ed92d-d3f0-4eb9-afec-b7706ab4f87a" : actorId, // Assign to HR or keep the same actor for rejection
+                    ActorId = isApproved ? "ba2ed92d-d3f0-4eb9-afec-b7706ab4f87a" : actorId, 
                     Action = isApproved ? "Pending HR Approval" : "Rejected by Supervisor",
                     ActionDate = DateTime.UtcNow,
                     Comment = comment
@@ -161,6 +170,9 @@ namespace MiniProject7.Infrastructure.Data.Repository
                     nextStepId = 4; // StepId for final approval
                     nextProcessStatus = "Approved";
                     leaveRequest.Description = "Approved by HR";
+                    // Email notification to Employee
+                    emailSubject = "Leave Request Approved";
+                    emailBody = $"Your leave request '{leaveRequest.RequestName}' has been approved by HR.";
                 }
                 else
                 {
@@ -168,6 +180,9 @@ namespace MiniProject7.Infrastructure.Data.Repository
                     nextStepId = 5; // Rejected
                     nextProcessStatus = "Rejected";
                     leaveRequest.Description = "Rejected by HR";
+                    // Email notification to Employee
+                    emailSubject = "Leave Request Rejected";
+                    emailBody = $"Your leave request '{leaveRequest.RequestName}' has been rejected by HR.";
                 }
 
                 // Update the HR action in WorkflowActions
@@ -196,10 +211,9 @@ namespace MiniProject7.Infrastructure.Data.Repository
                 process.CurrentStepId = nextStepId;
             }
 
-            
-
             await _context.SaveChangesAsync();
-
+            // Send email notification
+            await _emailService.SendEmailAsync(employeeEmail, emailSubject, emailBody);
             return true;
         }
 
@@ -211,7 +225,7 @@ namespace MiniProject7.Infrastructure.Data.Repository
                 RequesterId = userId,
                 RequestType = "Leave Request",
                 Status = "Pending Supervisor Approval",
-                CurrentStepId = 1, // Step ID for Librarian Approval
+                CurrentStepId = 2, // Step ID for Librarian Approval
                 RequestDate = DateTime.UtcNow
             };
 
@@ -249,12 +263,25 @@ namespace MiniProject7.Infrastructure.Data.Repository
             };
             _context.WorkflowActions.Add(action);
             await _context.SaveChangesAsync();
+
+            // Step 5: Get employee email and send a notification
+            var employee = await _context.Employees
+                .Where(e => e.UserId == userId)
+                .FirstOrDefaultAsync();
+
+            if (employee != null)
+            {
+                var emailSubject = "Leave Request Submitted";
+                var emailBody = $"Dear {employee.Fname},<br>Your leave request for {leaveRequest.StartDate:MMMM dd, yyyy} to {leaveRequest.EndDate:MMMM dd, yyyy} has been submitted and is awaiting approval.";
+
+                await _emailService.SendEmailAsync(employee.Email, emailSubject, emailBody);
+            }
         }
 
         public async Task<string> GetEmployeeEmailById(string appUserId)
         {
             var employee = await _context.Employees
-                .Where(e => e.UserId == appUserId) // Assuming 'AppUserId' is the property in 'Employee' that relates to the 'AspNetUsers'
+                .Where(e => e.UserId == appUserId) 
                 .FirstOrDefaultAsync();
 
             return employee?.Email;

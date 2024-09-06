@@ -21,20 +21,31 @@ namespace MiniProject7.Application.Services
 
         public async Task SendEmailAsync(string toEmail, string subject, string body)
         {
-            var emailSettings = _configuration.GetSection("EmailSettings");
+            var smtpSettings = _configuration.GetSection("SmtpSettings");
 
-            using (var client = new SmtpClient(emailSettings["SMTPServer"], int.Parse(emailSettings["SMTPPort"])))
+            if (string.IsNullOrEmpty(smtpSettings["Port"]))
             {
-                client.EnableSsl = bool.Parse(emailSettings["EnableSSL"]);
-                client.Credentials = new NetworkCredential(emailSettings["Username"], emailSettings["Password"]);
+                throw new Exception("SMTP Port is not configured properly.");
+            }
+
+            if (!int.TryParse(smtpSettings["Port"], out int port))
+            {
+                throw new Exception("SMTP Port is not a valid number.");
+            }
+
+            using (var client = new SmtpClient(smtpSettings["Host"], port))
+            {
+                client.EnableSsl = bool.Parse(smtpSettings["EnableSsl"]);
+                client.Credentials = new NetworkCredential(smtpSettings["Username"], smtpSettings["Password"]);
 
                 var mailMessage = new MailMessage
                 {
-                    From = new MailAddress(emailSettings["SenderEmail"], emailSettings["SenderName"]),
+                    From = new MailAddress(smtpSettings["Username"]),
                     Subject = subject,
                     Body = body,
                     IsBodyHtml = true
                 };
+
                 mailMessage.To.Add(toEmail);
 
                 await client.SendMailAsync(mailMessage);

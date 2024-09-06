@@ -53,7 +53,7 @@ namespace MiniProject7.WebAPI.Controllers
 
         [Authorize(Roles = "HR Manager, Supervisor")]
         [HttpPut("approve")]
-        public async Task<IActionResult> ApproveLeaveRequest([FromBody] LeaveApprovalRequestDto request)
+        public async Task<IActionResult> ApproveLeaveRequest(int actionId,[FromBody] LeaveApprovalRequestDto request)
         {
             try
             {
@@ -74,6 +74,7 @@ namespace MiniProject7.WebAPI.Controllers
             }
         }
 
+        [Authorize(Roles = "Employee, HR Manager, Supervisor")]
         [HttpPost("submit-leave")]
         public async Task<ActionResult> SubmitLeaveRequestAsync(LeaveRequest request, string userId)
         {
