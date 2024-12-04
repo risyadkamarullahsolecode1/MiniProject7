@@ -21,9 +21,7 @@ namespace MiniProject7.Domain.Entities
         [Column("mgrempno")]
         public int? Mgrempno { get; set; }
 
-        [Column("location")]
-        [StringLength(100)]
-        public string? Location { get; set; }
+        public int? LocationId { get; set; }
 
         [Column("spvempno")]
         public int? Spvempno { get; set; }

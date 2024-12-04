@@ -9,6 +9,7 @@ using MiniProject7.Domain.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
@@ -36,6 +37,11 @@ namespace MiniProject7.Infrastructure.Data.Repository
             await _context.Workflows.AddAsync(workflow);
             await _context.SaveChangesAsync();
             return workflow;
+        }
+
+        public async Task<Workflow?> GetFirstOrDefaultAsync(Expression<Func<Workflow, bool>> expression)
+        {
+            return await _context.Workflows.FirstOrDefaultAsync(expression);
         }
 
         // add workflow sequence
@@ -265,26 +271,21 @@ namespace MiniProject7.Infrastructure.Data.Repository
             await _context.SaveChangesAsync();
 
             // Step 5: Get employee email and send a notification
-            var employee = await _context.Employees
-                .Where(e => e.UserId == userId)
-                .FirstOrDefaultAsync();
-
-            if (employee != null)
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user != null)
             {
                 var emailSubject = "Leave Request Submitted";
-                var emailBody = $"Dear {employee.Fname},<br>Your leave request for {leaveRequest.StartDate:MMMM dd, yyyy} to {leaveRequest.EndDate:MMMM dd, yyyy} has been submitted and is awaiting approval.";
+                var emailBody = $"Dear {user.UserName},<br>Your leave request for {leaveRequest.StartDate:MMMM dd, yyyy} to {leaveRequest.EndDate:MMMM dd, yyyy} has been submitted and is awaiting approval.";
 
-                await _emailService.SendEmailAsync(employee.Email, emailSubject, emailBody);
+                await _emailService.SendEmailAsync(user.Email, emailSubject, emailBody);
             }
         }
 
         public async Task<string> GetEmployeeEmailById(string appUserId)
         {
-            var employee = await _context.Employees
-                .Where(e => e.UserId == appUserId) 
-                .FirstOrDefaultAsync();
+            var user = await _userManager.FindByIdAsync(appUserId);
 
-            return employee?.Email;
+            return user?.Email;
         }
     }
 }
