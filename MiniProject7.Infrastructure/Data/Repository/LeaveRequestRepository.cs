@@ -71,9 +71,17 @@ namespace MiniProject7.Infrastructure.Data.Repository
                     .ThenInclude(p => p.CurrentStep)
                     .ThenInclude(wfs => wfs.RequiredRole)
                 .Include(r => r.Process)
+                    .ThenInclude(p => p.Requester)
+                .Include(r => r.Process)
                     .ThenInclude(p => p.WorkflowActions)
                 .Where(r => r.Process.CurrentStep.RequiredRole.Name == userRole)
                 .ToListAsync();
+        }
+
+        public async Task<LeaveRequest> GetByProcessIdAsync(int processId)
+        {
+            return await _context.LeaveRequests
+                                 .FirstOrDefaultAsync(lr => lr.ProcessId == processId);
         }
     }
 }

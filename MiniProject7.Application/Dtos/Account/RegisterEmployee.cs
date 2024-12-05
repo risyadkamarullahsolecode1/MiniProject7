@@ -21,11 +21,9 @@ namespace MiniProject7.Application.Dtos.Account
         public int? Deptno { get; set; }
         public string? Employeetype { get; set; }
         public int? Level { get; set; }
-        public DateTime? Lastupdateddate { get; set; }
         public int? Nik { get; set; }
         public string? Status { get; set; }
         public string? Statusreason { get; set; }
         public int? Salary { get; set; }
-        public string? UserId { get; set; }
     }
 }

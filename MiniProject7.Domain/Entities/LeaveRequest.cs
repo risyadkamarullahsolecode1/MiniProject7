@@ -17,11 +17,13 @@ namespace MiniProject7.Domain.Entities
         public virtual Process? Process { get; set; }
         public string? EmployeeId { get; set; } // Foreign Key to AspNetUsers
         public virtual AppUser? Employee { get; set; }
-        public DateTime? StartDate { get; set; }
-        public DateTime? EndDate { get; set; }
+        public DateOnly? StartDate { get; set; }
+        public DateOnly? EndDate { get; set; }
         [RegularExpression("Annual Leave|Sick Leave|Personal Leave")]
         public string? LeaveType { get; set; } // e.g., Sick Leave, Personal Leave
         public string? Reason { get; set; }
-
+        // File-related properties
+        public string? FileName { get; set; }
+        public string? FilePath { get; set; }
     }
 }

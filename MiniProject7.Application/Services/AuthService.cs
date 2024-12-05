@@ -69,7 +69,7 @@ namespace MiniProject7.Application.Services
                 Deptno = registerEmployee.Deptno,
                 Employeetype = registerEmployee.Employeetype,
                 Level = registerEmployee.Level,
-                Lastupdateddate = registerEmployee.Lastupdateddate,
+                Lastupdateddate = DateTime.Now,
                 Nik = registerEmployee.Nik,
                 Salary = registerEmployee.Salary,
                 Status = registerEmployee.Status,

@@ -5,12 +5,13 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
 
 namespace MiniProject7.Application.Interfaces
 {
     public interface ILeaveRequestService
     {
-        Task<BaseResponseDto> SubmitLeaveRequest(LeaveRequestDto request);
+        Task<BaseResponseDto> SubmitLeaveRequest(LeaveRequestDto request, IFormFile? file);
         Task<BaseResponseDto> ReviewLeaveRequest(ReviewRequestDto reviewRequest);
         Task<IEnumerable<object>> GetAllLeaveRequestStatuses();
         Task<ProcessDetailDto> GetProcessAsync(int processId);

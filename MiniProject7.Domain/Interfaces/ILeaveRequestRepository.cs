@@ -17,5 +17,6 @@ namespace MiniProject7.Domain.Interfaces
         Task DeleteAsync(int id);
         Task<IEnumerable<LeaveRequest>> GetAllByUserAsync(Expression<Func<LeaveRequest, bool>> expression);
         Task<IEnumerable<LeaveRequest>> GetAllToStatusAsync(string userRole);
+        Task<LeaveRequest> GetByProcessIdAsync(int processId);
     }
 }

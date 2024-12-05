@@ -18,9 +18,9 @@ namespace MiniProject7.WebAPI.Controllers
 
         [Authorize(Roles = "Employee")]
         [HttpPost("submit")]
-        public async Task<IActionResult> SubmitRequest(LeaveRequestDto leaveRequest)
+        public async Task<IActionResult> SubmitRequest([FromForm]LeaveRequestDto leaveRequest, IFormFile? file)
         {
-            var res = await _leaveRequestService.SubmitLeaveRequest(leaveRequest);
+            var res = await _leaveRequestService.SubmitLeaveRequest(leaveRequest, file);
             if (res == null)
             {
                 return NotFound();

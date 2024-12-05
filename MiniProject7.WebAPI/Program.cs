@@ -1,7 +1,11 @@
 using Microsoft.AspNetCore.CookiePolicy;
+using Microsoft.Extensions.FileProviders;
 using MiniProject7.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Serve the "Uploads" folder as static files
+var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "Uploads");
 
 // Add services to the container.
 builder.Services.AddCors(options =>
@@ -41,7 +45,11 @@ app.UseHttpsRedirection();
 app.UseCors("AllowReactApp");
 app.UseAuthentication();
 app.UseAuthorization();
-
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(uploadsFolder),
+    RequestPath = "/Uploads"
+});
 app.MapControllers();
 
 app.Run();

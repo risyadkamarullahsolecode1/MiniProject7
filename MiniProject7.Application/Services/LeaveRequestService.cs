@@ -9,6 +9,7 @@ using MiniProject7.Domain.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection.Metadata;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
@@ -61,24 +62,26 @@ namespace MiniProject7.Application.Services
 
             var userRoles = await _userManager.GetRolesAsync(user);
             var applications = new List<LeaveRequest>();
+            var request = _httpContextAccessor.HttpContext.Request;
+            var baseUrl = $"{request.Scheme}://{request.Host}/Uploads/";
 
             foreach (var role in userRoles)
             {
                 if (role == "Employee")
                 {
-                    // Fetch book requests created by the user (RequesterId)
-                    var userApplications = await _leaveRequestRepository.GetAllByUserAsync(r => r.RequestName == user.Id);
+                    // Fetch leave requests created by the user (RequesterId)
+                    var userApplications = await _leaveRequestRepository.GetAllByUserAsync(r => r.EmployeeId == user.Id);
                     applications.AddRange(userApplications);
                 }
                 else if (role == "Employee Supervisor" || role == "HR Manager")
                 {
-                    // Fetch book requests assigned to the role (based on the workflow step)
+                    // Fetch leave requests assigned to the role (based on the workflow step)
                     var roleApplications = await _leaveRequestRepository.GetAllToStatusAsync(role);
                     applications.AddRange(roleApplications);
                 }
             }
 
-            // Include requests that are in progress for Library Users or completed but involve the current user
+            // Include all requests, add total days, and fix ApplicantName
             var allApplications = applications.Select(app => new
             {
                 RequestId = app.RequestId,
@@ -86,10 +89,17 @@ namespace MiniProject7.Application.Services
                 ProcessId = app.ProcessId,
                 StartDate = app.StartDate,
                 EndDate = app.EndDate,
+                TotalDays = app.EndDate.HasValue && app.StartDate.HasValue
+                    ? (app.EndDate.Value.DayNumber - app.StartDate.Value.DayNumber + 1)
+                    : 0,
                 LeaveType = app.LeaveType,
-                ApplicantName = $"{app.Process?.Requester?.UserName}",
+                Reason = app.Reason,
+                SubmissionDate = app.Process?.RequestDate,
+                ApplicantName = app.Process?.Requester?.UserName ?? "Unknown", 
                 Status = app.Process?.Status,
-                CurrentStep = app.Process?.CurrentStep.StepName,  // Shows current step in the workflow
+                CurrentStep = app.Process?.CurrentStep?.StepName ?? "Unknown",
+                FileName = app.FileName,
+                FilePath = app.FileName != null ? $"{baseUrl}{Uri.EscapeDataString(app.FileName)}" : null
             }).ToList();
 
             return allApplications;
@@ -100,34 +110,37 @@ namespace MiniProject7.Application.Services
             var process = await _processRepository.GetByIdAsync(processId);
             if (process == null)
             {
-                return null; // Handle the case where process is not found
+                throw new NullReferenceException("Process not found.");
             }
 
-            // Fetch related BookRequest and WorkflowAction
-            var bookRequest = await _leaveRequestRepository.GetAsync(processId);
-            var workflowActions = await _workflowActionRepository.GetByProcessIdAsync(process.ProcessId);
+            var leaveRequest = await _leaveRequestRepository.GetByProcessIdAsync(processId);
+            if (leaveRequest == null)
+            {
+                throw new NullReferenceException("Leave request not found for the given process ID.");
+            }
 
-            // Construct the response DTO to include BookRequest and WorkflowActions
+            var workflowActions = await _workflowActionRepository.GetByProcessIdAsync(process.ProcessId) ?? new List<WorkflowAction>();
+
             var processDetailDto = new ProcessDetailDto
             {
                 ProcessId = process.ProcessId,
-                RequestName = bookRequest.RequestName,
-                Reason = bookRequest.Reason,
-                LeaveType = bookRequest.LeaveType,
-                Status = process.Status,
-                StartDate = bookRequest.StartDate,
-                EndDate = bookRequest.EndDate,
-                Description = bookRequest.Description,
+                RequestName = leaveRequest.RequestName ?? "No request name provided",
+                Reason = leaveRequest.Reason ?? "No reason provided",
+                LeaveType = leaveRequest.LeaveType ?? "Unknown",
+                Status = process.Status ?? "No status available",
+                StartDate = leaveRequest.StartDate,
+                EndDate = leaveRequest.EndDate,
+                Description = leaveRequest.Description ?? "No description provided",
                 WorkflowActions = workflowActions.Select(action => new WorkflowActionDto
                 {
                     ActionDate = action.ActionDate,
-                    ActionBy = action.ActorId,
-                    Action = action.Action,
-                    Comments = action.Comment
+                    ActionBy = action.Actor.UserName ?? "Unknown",
+                    Action = action.Action ?? "No action",
+                    Comments = action.Comment ?? "No comments"
                 }).ToList()
             };
 
-            return processDetailDto; // Return the DTO instead of the entity
+            return processDetailDto;
         }
 
         public async Task<BaseResponseDto> ReviewLeaveRequest(ReviewRequestDto reviewRequest)
@@ -243,10 +256,36 @@ namespace MiniProject7.Application.Services
             }
         }
 
-        public async Task<BaseResponseDto> SubmitLeaveRequest(LeaveRequestDto request)
+        public async Task<BaseResponseDto> SubmitLeaveRequest(LeaveRequestDto request, IFormFile? file)
         {
             try
             {
+                // Validate the file if provided
+                if (file != null)
+                {
+                    var allowedExtensions = new[] { ".pdf", ".jpg", ".jpeg" };
+                    var maxFileSize = 5 * 1024 * 1024; // 5 MB
+
+                    var fileExtension = Path.GetExtension(file.FileName).ToLower();
+                    if (!allowedExtensions.Contains(fileExtension))
+                    {
+                        return new BaseResponseDto
+                        {
+                            Status = "Error",
+                            Message = "Invalid file type. Only PDF and JPG/JPEG are allowed."
+                        };
+                    }
+
+                    if (file.Length > maxFileSize)
+                    {
+                        return new BaseResponseDto
+                        {
+                            Status = "Error",
+                            Message = "File size exceeds the 5MB limit."
+                        };
+                    }
+                }
+
                 // Get the current logged-in user
                 var userName = _httpContextAccessor.HttpContext?.User?.FindFirstValue(ClaimTypes.Name);
                 if (string.IsNullOrEmpty(userName))
@@ -327,12 +366,34 @@ namespace MiniProject7.Application.Services
 
                 _logger.LogInformation("NextStepId found: {NextStepId}", nextStepId.NextStepId);
 
+                // Save the file if provided
+                string? savedFileName = null;
+                string? savedFilePath = null;
+                if (file != null)
+                {
+                    var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "Uploads");
+                    if (!Directory.Exists(uploadsFolder))
+                    {
+                        Directory.CreateDirectory(uploadsFolder);
+                    }
+
+                    var fileExtension = Path.GetExtension(file.FileName); // Get file extension
+                    var originalFileName = Path.GetFileNameWithoutExtension(file.FileName); // Get original file name without ext
+                    savedFileName = $"{Guid.NewGuid()}_{originalFileName}{fileExtension}";
+                    savedFilePath = Path.Combine(uploadsFolder, savedFileName);
+
+                    using (var stream = new FileStream(savedFilePath, FileMode.Create))
+                    {
+                        await file.CopyToAsync(stream);
+                    }
+                }
+
                 var newProcess = new Process
                 {
                     RequesterId = user.Id,
                     WorkflowId = workflow.WorkflowId,
                     RequestType = "Leave Request",
-                    Status = "Pending Approval",
+                    Status = "Under Review",
                     RequestDate = DateTime.UtcNow,
                     CurrentStepId = nextStepId.NextStepId,
                 };
@@ -348,6 +409,8 @@ namespace MiniProject7.Application.Services
                     Reason = request.Reason,
                     ProcessId = newProcess.ProcessId,
                     EmployeeId = user.Id,
+                    FileName = savedFileName,
+                    FilePath = savedFilePath
                 };
                 await _leaveRequestRepository.AddAsync(newLeaveRequest);
 
